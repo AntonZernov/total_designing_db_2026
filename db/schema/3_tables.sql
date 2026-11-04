@@ -119,12 +119,32 @@ create table zernov_food.review (
     review_id uuid primary key default exts.uuid_generate_v4(),
     client_id uuid not null references zernov_food.client(client_id),
     review_timestamp timestamp not null default localtimestamp,
-    entity_id uuid not null,
-    entity_type zernov_food.review_entity not null,
     order_id uuid not null,
     description text not null,
     photo_url text,
     rating numeric(3, 2) not null check (rating between 0 and 5),
-    constraint review_order_client_fkey foreign key (order_id, client_id) references zernov_food.orders(order_id, client_id),
-    constraint review_order_entity_ukey unique (order_id, entity_id, entity_type)
+    constraint review_order_client_fkey foreign key (order_id, client_id) references zernov_food.orders(order_id, client_id)
+);
+
+create table zernov_food.order_reviews (
+    review_id uuid primary key references zernov_food.review(review_id) on delete cascade,
+    order_id uuid not null,
+    entity_type zernov_food.review_entity not null default 'заказ' check (entity_type = 'заказ'),
+    constraint uq_order_reviews_order unique (order_id)
+);
+
+create table zernov_food.restaurant_reviews (
+    review_id uuid primary key references zernov_food.review(review_id) on delete cascade,
+    restaurant_id uuid not null references zernov_food.restaurant(restaurant_id),
+    order_id uuid not null,
+    entity_type zernov_food.review_entity not null default 'ресторан' check (entity_type = 'ресторан'),
+    constraint uq_restaurant_reviews_order unique (order_id)
+);
+
+create table zernov_food.product_reviews (
+    review_id uuid primary key references zernov_food.review(review_id) on delete cascade,
+    product_id uuid not null references zernov_food.product(product_id),
+    order_id uuid not null,
+    entity_type zernov_food.review_entity not null default 'блюдо' check (entity_type = 'блюдо'),
+    constraint uq_product_reviews_order_product unique (order_id, product_id)
 );
