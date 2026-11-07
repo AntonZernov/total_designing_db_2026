@@ -98,7 +98,7 @@ create table if not exists zernov_food.payment (
     amount numeric(8, 2) not null check (amount >= 0),
     transaction_id varchar(64) not null unique,
     status zernov_food.pay_attempt_status not null,
-    payment_timestamp timestamp not null default localtimestamp,
+    payment_timestamp timestamp not null default localtimestamp
 );
 
 create table if not exists zernov_food.order_structure (
