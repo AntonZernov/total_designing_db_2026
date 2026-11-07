@@ -45,7 +45,7 @@ create table if not exists zernov_food.courier (
 create table if not exists zernov_food.courier_pay (
     year int not null,
     month int not null check (month between 1 and 12),
-    courier_id uuid not null references zernov_food.courier(courier_id) on delete cascade,
+    courier_id uuid not null references zernov_food.courier(courier_id),
     amount numeric(8, 2) not null check (amount >= 0),
     coefficient_used numeric(2, 1) not null check (coefficient_used between 0.1 and 0.5),
     primary key (year, month, courier_id)
@@ -93,7 +93,7 @@ create table if not exists zernov_food.orders (
 
 create table if not exists zernov_food.payment (
     payment_id uuid primary key default exts.uuid_generate_v4(),
-    order_id uuid not null references zernov_food.orders(order_id) on delete cascade,
+    order_id uuid not null references zernov_food.orders(order_id),
     payment_type zernov_food.payment_type not null,
     amount numeric(8, 2) not null check (amount >= 0),
     transaction_id varchar(64) not null unique,
@@ -124,7 +124,8 @@ create table if not exists zernov_food.review (
     description text not null,
     photo_url text,
     rating numeric(3, 2) not null check (rating between 0 and 5),
-    constraint review_order_client_fkey foreign key (order_id, client_id) references zernov_food.orders(order_id, client_id)
+    constraint review_order_client_fkey foreign key (order_id, client_id)
+        references zernov_food.orders(order_id, client_id)
 );
 
 create table if not exists zernov_food.order_reviews (
