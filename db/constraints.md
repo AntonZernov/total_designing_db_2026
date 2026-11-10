@@ -72,9 +72,8 @@ constraint orders_client_address_fkey foreign key (client_id, address_id)
 **Как реализована валидность `review.entity_id`:**
 
 ```
-Выполнена нормализация, так как дает гарантию консистентности, сущности связаны реальными внешними ключами и исключают подмену.
-Дает удобный механизм защиты от нескольких отзывов на один заказ, так как нет необходимости разрабатывать дополнительный триггер
-контроля.
+Сохранен полиморфизм. FK отсутствует, так как поле не может ссылаться на разные таблицы.
+Целостность контролируется составными ключами и триггером.
 ```
 
 ---
@@ -83,85 +82,81 @@ constraint orders_client_address_fkey foreign key (client_id, address_id)
 
 Каждое — с ссылкой на BR.
 
-| Таблица         | Столбец                            | Условие | BR             | Обоснование                                       |
-|-----------------|------------------------------------|-|----------------|---------------------------------------------------|
-| client          | password                           |~* '^[0-9a-f]{32}$'| BR-2.3         | Пароль в виде MD5 32 символа, регистронезависимый |
-| restaurant      | work_start, work_end               |work_start < work_end| BR-4.4         | Время открытия раньше времени закрытия            |
-| restaurant      | rating                             |rating between 0 and 5| BR-4.2         | Значение от 0 до 5                                |
-| product         | price                              |price >= 0| BR-5.3         | Цена не может быть отрицательной                  |
-| product         | rating                             |rating between 0 and 5| BR-5.4         | Рейтинг от 0 до 5                                 |
-| courier         | coefficient                        |default 0.1 check (coefficient between 0.1 and 0.5)| BR-5.4 BR-5.4  | Коэффициент от 0.1 до 0.5 по умолчанию 0.1        |
-| courier         | status, dismissal_date             |status != 'уволен' or dismissal_date is not null| BR-6.3         | Уволенный обязан иметь дату увольнения            |
-| courier         | hire_date, dismissal_date          |dismissal_date >= hire_date| BR-6.1         | Дата увольнения не раньше даты найма              |
-| courier_pay     | month                              |month between 1 and 12| BR-10.3        | Месяц оплаты календарный                          |
-| courier_pay     | amount                             |amount >= 0| BR-10.4        | Сумма оплаты неотрицательная                      |
-| courier_pay     | coefficient_used                   |coefficient_used between 0.1 and 0.5| BR-6.4         | Коэффициент от 0.1 до 0.5                         |
-| orders          | total_amount                       |>= 1000| BR-1.8 BR-7.11 | Минимальный заказ на 1000р                        |
-| orders          | delivery_timestamp, order_timestamp |delivery_timestamp > order_timestamp| BR-7.13        | Доставка не раньше создания заказа                |
-| order_structure | quantity                           |quantity > 0)| BR-7.15        | Количество - положительное число                  |
-| amount          | amount|amount >= 0| BR-8.2         | Сумма оплаты не может быть отрицательной          |
-| review          |rating |rating between 0 and 5| BR-9.4         | Рейтинг от 0 до 5   |
-| order_reviews   | entity_type|entity_type = 'заказ'| BR-9.1         | Отзыыв на заказ                                   |
-| restaurant_reviews   | entity_type|entity_type = 'ресторан'| BR-9.1         | Отзыыв на ресторан                                |
-| product_reviews   | entity_type|entity_type = 'блюдо'| BR-9.1         | Отзыыв на блюдо                                   |
+| Таблица         | Столбец                            | Условие                                                       | BR             | Обоснование                                       |
+|-----------------|------------------------------------|---------------------------------------------------------------|----------------|---------------------------------------------------|
+| client          | password                           | ~* '^[0-9a-f]{32}$'                                           | BR-2.3         | Пароль в виде MD5 32 символа, регистронезависимый |
+| restaurant      | work_start, work_end               | work_start < work_end                                         | BR-4.4         | Время открытия раньше времени закрытия            |
+| restaurant      | rating                             | rating between 0 and 5                                        | BR-4.2         | Значение от 0 до 5                                |
+| product         | price                              | price >= 0                                                    | BR-5.3         | Цена не может быть отрицательной                  |
+| product         | rating                             | rating between 0 and 5                                        | BR-5.4         | Рейтинг от 0 до 5                                 |
+| courier         | coefficient                        | default 0.1 check (coefficient between 0.1 and 0.5)           | BR-5.4 BR-5.4  | Коэффициент от 0.1 до 0.5 по умолчанию 0.1        |
+| courier         | status, dismissal_date             | status != 'уволен' or dismissal_date is not null              | BR-6.3         | Уволенный обязан иметь дату увольнения            |
+| courier         | hire_date, dismissal_date          | dismissal_date >= hire_date                                   | BR-6.1         | Дата увольнения не раньше даты найма              |
+| courier_pay     | month                              | month between 1 and 12                                        | BR-10.3        | Месяц оплаты календарный                          |
+| courier_pay     | amount                             | amount >= 0                                                   | BR-10.4        | Сумма оплаты неотрицательная                      |
+| courier_pay     | coefficient_used                   | coefficient_used between 0.1 and 0.5                          | BR-6.4         | Коэффициент от 0.1 до 0.5                         |
+| orders          | total_amount                       | >= 1000                                                       | BR-1.8 BR-7.11 | Минимальный заказ на 1000р                        |
+| orders          | delivery_timestamp, order_timestamp | delivery_timestamp > order_timestamp                          | BR-7.13        | Доставка не раньше создания заказа                |
+| orders          | delivery_timestamp, order_timestamp | (status = 'доставлен' and delivery_timestamp is not null) or (status != 'доставлен') | BR-7.12        | Время окончания доставки заполняется, когда заказ получает статус 'доставлен'               |
+| order_structure | quantity                           | quantity > 0)                                                 | BR-7.15        | Количество - положительное число                  |
+| amount          | amount| amount >= 0                                                   | BR-8.2         | Сумма оплаты не может быть отрицательной          |
+| review          |rating | rating between 1 and 5                                        | BR-9.4         | Рейтинг от 1 до 5                                 |
 
 ---
 
 ## UNIQUE-ограничения
 
-| Таблица          | Столбцы   | BR      | Обоснование                                                                                        |
-|------------------|-----------|---------|----------------------------------------------------------------------------------------------------|
-| client           | login     | BR-2.2  | Логин уникален                                                                                     |
-| client           | phone_number | BR-2.2  | Телефон уникален                                                                                   |
-| courier          | phone_number | BR-6.1  | Телефон является одним из идентификаторов курьера                                                  |
-| client_address   | primary key (client_id, address_id) | BR-2.5  | Один адрес нельзя привязать клиенту дважды                                                         |
-| restaurant       | address_id | BR-3.3  | Один адрес не может быть у двух ресторанов                                                         |
-| product_category | product_category_name | BR-5.7  | Категория блюда — это справочник                                                                   |
-| product          | product_id, restaurant_id | BR-7.3  | один из составных ключей для соблюдения: Нельзя заказать блюда из разных ресторанов в одном заказе |
-| courier_pay      | primary key (year, month, courier_id)| BR-10.3 | за один месяц у одного курьера — ровно одна запись                                                 |
-| orders           | order_id, client_id| BR-9.2  | Отзыв всегда связан с конкретным заказом клиента                                                   |
-| orders           | order_id, restaurant_id| BR-7.3  | один из составных ключей для соблюдения: Нельзя заказать блюда из разных ресторанов в одном заказе |
-| payment          | transaction_id| BR-8.3  | Идентификатор финансовой транзакции — внешний, приходит от платёжного провайдера. Уникален         |
-| payment          | (order_id) where status = 'успех'| BR-8.1  | Не более одного успешного платежа                                                                  |
-| order_structure| primary key (order_id, product_id)| BR-7.16 | Одно блюдо в заказе не встречается дважды                                                          |
-| order_reviews| order_id| BR-9.5  | Один отзыв на заказ                                                                                |
-| restaurant_reviews| order_id| BR-9.5  | Один отзыв на ресторан за заказ                                                                    |
-| product_reviews| unique (order_id, product_id)| BR-9.5  | Один отзыв на каждый продукт за заказ                                                              |
+| Таблица            | Столбцы   | BR      | Обоснование                                                                                        |
+|--------------------|-----------|---------|----------------------------------------------------------------------------------------------------|
+| client             | login     | BR-2.2  | Логин уникален                                                                                     |
+| client             | phone_number | BR-2.2  | Телефон уникален                                                                                   |
+| courier_profile    | phone_number | BR-6.1  | Телефон является одним из идентификаторов курьера                                                  |
+| client_address     | primary key (client_id, address_id) | BR-2.5  | Один адрес нельзя привязать клиенту дважды                                                         |
+| restaurant         | address_id | BR-3.3  | Один адрес не может быть у двух ресторанов                                                         |
+| product_category   | product_category_name | BR-5.7  | Категория блюда — это справочник                                                                   |
+| product            | product_id, restaurant_id | BR-7.3  | один из составных ключей для соблюдения: Нельзя заказать блюда из разных ресторанов в одном заказе |
+| product            | product_name, restaurant_id | BR-11.8 | Подразумевает вывод названия самого покупаемого болюда, название блюда в одном ресторане уникально |
+| courier_pay        | primary key (year, month, courier_id)| BR-10.3 | за один месяц у одного курьера — ровно одна запись                                                 |
+| orders             | order_id, client_id| BR-9.2  | Отзыв всегда связан с конкретным заказом клиента                                                   |
+| orders             | order_id, restaurant_id| BR-7.3  | один из составных ключей для соблюдения: Нельзя заказать блюда из разных ресторанов в одном заказе |
+| payment            | transaction_id| BR-8.3  | Идентификатор финансовой транзакции — внешний, приходит от платёжного провайдера. Уникален         |
+| payment            | (order_id) where status = 'успех'| BR-8.1  | Не более одного успешного платежа                                                                  |
+| order_structure    | primary key (order_id, product_id)| BR-7.16 | Одно блюдо в заказе не встречается дважды                                                          |
 ---
 
 ## FK-ограничения
 
-| Таблица         | Столбцы             | → Таблица        | BR      | Обоснование                              |
-|-----------------|---------------------|------------------|---------|------------------------------------------|
-| client_address  | client_id           | client           | BR-2.4  | Адрес привязан к существующему клиенту   |
-| client_address  | address_id          | address          | BR-2.4  | Адрес привязан к существующему клиенту   |
-| restaurant      | address_id          | address          | BR-3.3  | У ресторана один адрес                   |
-| product         | product_category_id | product_category | BR-5.1  | Блюдо привязано к одной категории        |
-| product         | restaurant_id       | restaurant       | BR-5.1  | Блюдо привязано к однму ресторану        |
-| courier_pay     | courier_id          | courier          | BR-10.2 | Выплата привязана к одному курьеру       |
-| orders          | client_id           | client           | BR-7.2  | Заказ привязан к одному клиенту          |
-| orders          | restaurant_id       | restaurant       | BR-7.2  | Заказ привязан к одному клиенту          |
-| orders          | courier_id          | courier          | BR-7.5  | Заказ привязан к одному курьеру          |
-| orders          | client_id, address_id| client_address   | BR-7.4  | Адрес доставки - один из адресов клиента |
-| order_structure | order_id, restaurant_id| orders           | BR-7.14 | Позиция принадлежит заказу               |
-| order_structure | product_id, restaurant_id| product          | BR-7.3  | Блюдо из ресторана заказа                |
-| payment         | order_id| orders           | BR-8.1  | Оплата привязана к заказу                |
-| review          | client_id| client           | BR-9.1  | Отзыв привязан к клиенту                 |
-| review          | order_id, client_id| orders           | BR-9.2  | Отзыв привязан к заказу конкретного клиента |
-| order_reviews          | review_id| review           | BR-9.1  | Отзыыв на заказ |
-| restaurant_reviews          | review_id| review           | BR-9.1  | Отзыыв на ресторан |
-| product_reviews          | review_id| review           | BR-9.1  | Отзыыв на блюдо |
+| Таблица         | Столбцы           | → Таблица        | BR      | Обоснование                                                                                          |
+|-----------------|-------------------|------------------|---------|------------------------------------------------------------------------------------------------------|
+| client_address  | client_id         | client           | BR-2.4  | Адрес привязан к существующему клиенту                                                               |
+| client_address  | address_id        | address          | BR-2.4  | Адрес привязан к существующему клиенту                                                               |
+| restaurant      | address_id        | address          | BR-3.3  | У ресторана один адрес                                                                               |
+| product         | product_category_id | product_category | BR-5.1  | Блюдо привязано к одной категории                                                                    |
+| product         | restaurant_id     | restaurant       | BR-5.1  | Блюдо привязано к однму ресторану                                                                    |
+| courier_pay     | courier_id        | courier          | BR-10.2 | Выплата привязана к одному курьеру                                                                   |
+| orders          | client_id         | client           | BR-7.2  | Заказ привязан к одному клиенту                                                                      |
+| orders          | restaurant_id     | restaurant       | BR-7.2  | Заказ привязан к одному клиенту                                                                      |
+| orders          | courier_id        | courier          | BR-7.5  | Заказ привязан к одному курьеру                                                                      |
+| orders          | client_id, address_id| client_address   | BR-7.4  | Адрес доставки - один из адресов клиента                                                             |
+| order_structure | order_id, restaurant_id| orders           | BR-7.14 | Позиция принадлежит заказу                                                                           |
+| order_structure | product_id, restaurant_id| product          | BR-7.3  | Блюдо из ресторана заказа                                                                            |
+| payment         | order_id| orders           | BR-8.1  | Оплата привязана к заказу                                                                            |
+| review          | client_id| client           | BR-9.1  | Отзыв привязан к клиенту                                                                             |
+| review          | order_id| orders           | BR-9.2  | Отзыв привязан к заказу конкретного клиента                                                          |
+| review          | client_id| client           | BR-9.2  | Отзыв привязан к заказу конкретного клиента                                                          |
+| courier          | courier_profile_id| courier_profile           | BR-6.3  | Курьер может быть уволен, а значит и нанят повторно, персональные данные нужно отделить от должности |
 
 ---
 
 ## NOT NULL (только бизнес-обязательные)
-| Таблица | Столбец     | BR     | Обоснование                                   |
-|---------|-------------|--------|-----------------------------------------------|
-| orders  | courier_id  | BR-7.5 | Доставка только курьером                      |
-| orders  | pay_status  | BR-7.8 | Всегда есть статус оплаты                     |
-| review  | description | BR-9.4 | В отзыыве есть текст                          |
-| review  | rating      | BR-9.4 | Всегда есть рейтинг начиная с нулевого        |
-| payment     | transaction_id         | BR-8.2 | Каждая попытка оплаты - финансовая транзакция |
+| Таблица | Столбец     | BR            | Обоснование                                   |
+|---------|-------------|---------------|-----------------------------------------------|
+| orders  | courier_id  | BR-7.5        | Доставка только курьером                      |
+| orders  | pay_status  | BR-7.8        | Всегда есть статус оплаты                     |
+| review  | description | BR-9.4        | В отзыыве есть текст                          |
+| review  | rating      | BR-9.4        | Всегда есть рейтинг начиная с нулевого        |
+| payment     | transaction_id         | BR-8.2        | Каждая попытка оплаты - финансовая транзакция |
+| restaurant     | company_details         | BR-4.1 BR-4.5 | У ресторана должны быть реквизиты |
 ---
 
 ## NULL (осознанно разрешено)
@@ -174,7 +169,6 @@ constraint orders_client_address_fkey foreign key (client_id, address_id)
 | restaurant | rating             | BR-9.7  | Нет отзывов - рейтинг null               |
 | courier    | dismissal_date     | BR-6.3  | Дата увольнения не обязательна           |
 | orders     | delivery_timestamp | BR-7.12 | Заполняется при статусе доставка         |
-| orders     | description        | BR-11.3 | Дополнительная информация, необязательна |
 | orders     | description        | BR-11.3 | Дополнительная информация, необязательна |
 | review     | photo_url          | BR-9.3  | Фото в отзыве необязательно              |
 

@@ -31,7 +31,7 @@
 
 ```sql
 SET ROLE inspector;
-SET search_path TO <фамилия>_food, exts;
+SET search_path TO zernov_food, exts;
 SELECT current_user;
 ```
 
@@ -75,32 +75,29 @@ FROM pg_extension WHERE extname = 'uuid-ossp';
 
 ```sql
 SELECT table_name FROM information_schema.tables
-WHERE table_schema = '<фамилия>_food'
+WHERE table_schema = 'zernov_food'
 ORDER BY table_name;
 ```
 
 Ожидается: `address`, `client`, `client_address`, `courier`, `courier_pay`, `order`, `order_structure`, `payment`, `product`, `product_category`, `restaurant`, `review` (12 + N штук).
 Факт: 
 ``` 
- address
- client
- client_address
- courier
- courier_pay
- how_much_money
- order_reviews
- order_structure
- orders
- payment
- product
- product_category
- product_reviews
- restaurant
- restaurant_reviews
- review
-(16 строк) 
+address
+client
+client_address
+courier
+courier_pay
+courier_profile
+how_much_money
+order_structure
+orders
+payment
+product
+product_category
+restaurant
+review
 ```
-12 + 3 таблицы нормализации и 1 view
+12 + 1 таблица нормализации и 1 view
 Вердикт: OK
 
 ### B.4. Все PK — `uuid`
@@ -156,37 +153,31 @@ ORDER BY t.typname;
 SELECT conname, conrelid::regclass AS tbl, confrelid::regclass AS ref
 FROM pg_constraint
 WHERE contype = 'f'
-  AND connamespace = '<фамилия>_food'::regnamespace
+  AND connamespace = 'zernov_food'::regnamespace
 ORDER BY tbl, conname;
 ```
 
 Ожидается: не менее 15 FK, все из erd.md.
 Факт: 
 ```commandline
-                conname                |              tbl               |             ref
----------------------------------------+--------------------------------+------------------------------
- client_address_address_id_fkey        | zernov_food.client_address     | zernov_food.address
- client_address_client_id_fkey         | zernov_food.client_address     | zernov_food.client
- courier_pay_courier_id_fkey           | zernov_food.courier_pay        | zernov_food.courier
- orders_address_id_fkey                | zernov_food.orders             | zernov_food.address
- orders_client_address_fkey            | zernov_food.orders             | zernov_food.client_address
- orders_client_id_fkey                 | zernov_food.orders             | zernov_food.client
- orders_courier_id_fkey                | zernov_food.orders             | zernov_food.courier
- orders_restaurant_id_fkey             | zernov_food.orders             | zernov_food.restaurant
- order_reviews_review_id_fkey          | zernov_food.order_reviews      | zernov_food.review
- order_structure_order_fkey            | zernov_food.order_structure    | zernov_food.orders
- order_structure_product_fkey          | zernov_food.order_structure    | zernov_food.product
- payment_order_id_fkey                 | zernov_food.payment            | zernov_food.orders
- product_product_category_id_fkey      | zernov_food.product            | zernov_food.product_category
- product_restaurant_id_fkey            | zernov_food.product            | zernov_food.restaurant
- product_reviews_product_id_fkey       | zernov_food.product_reviews    | zernov_food.product
- product_reviews_review_id_fkey        | zernov_food.product_reviews    | zernov_food.review
- restaurant_address_id_fkey            | zernov_food.restaurant         | zernov_food.address
- restaurant_reviews_restaurant_id_fkey | zernov_food.restaurant_reviews | zernov_food.restaurant
- restaurant_reviews_review_id_fkey     | zernov_food.restaurant_reviews | zernov_food.review
- review_client_id_fkey                 | zernov_food.review             | zernov_food.client
- review_order_client_fkey              | zernov_food.review             | zernov_food.orders
-(21 строка)
+client_address_address_id_fkey	client_address	address
+client_address_client_id_fkey	client_address	client
+courier_courier_profile_id_fkey	courier	courier_profile
+courier_pay_courier_id_fkey	courier_pay	courier
+orders_address_id_fkey	orders	address
+orders_client_address_fkey	orders	client_address
+orders_client_id_fkey	orders	client
+orders_courier_id_fkey	orders	courier
+orders_restaurant_id_fkey	orders	restaurant
+order_structure_order_fkey	order_structure	orders
+order_structure_product_fkey	order_structure	product
+payment_order_id_fkey	payment	orders
+product_product_category_id_fkey	product	product_category
+product_restaurant_id_fkey	product	restaurant
+restaurant_address_id_fkey	restaurant	address
+review_client_id_fkey	review	client
+review_order_client_fkey	review	orders
+review_order_id_fkey	review	orders
 ```
 Вердикт: OK
 
@@ -258,20 +249,17 @@ ORDER BY tbl;
 Ожидается: 10, 10, 10, 10, 50, 50, 50, 50, 50.
 Факт: 
 ```commandline
-       tbl        | count
-------------------+-------
- address          |    50
- client           |    10
- courier          |    10
- order            |    54
- payment          |    54
- product          |    50
- product_category |    10
- restaurant       |    10
- review           |    60
-(9 строк)
+client	10
+courier	10
+product_category	10
+restaurant	10
+address	50
+product	50
+order	50
+review	50
+payment	50
 ```
-Вердикт: FAIL - ошибки в счетчиках
+Вердикт: OK
 
 ### C.4. Адреса ресторанов vs клиентов (BR-11.7)
 
@@ -364,31 +352,17 @@ LIMIT 20;
 Ожидается: `amount = expected_amount` в каждой строке.
 Факт: 
 ```commandline
- year | month |              courier_id              | amount  | coefficient_used | expected_amount
-------+-------+--------------------------------------+---------+------------------+-----------------
- 2026 |     1 | 17d328e4-6f3f-4e65-a663-f391e48e8675 | 4924.00 |              0.5 |            0.00
- 2026 |     2 | 17d328e4-6f3f-4e65-a663-f391e48e8675 | 4127.00 |              0.3 |            0.00
- 2026 |     3 | 17d328e4-6f3f-4e65-a663-f391e48e8675 | 7657.00 |              0.2 |            0.00
- 2026 |     4 | 17d328e4-6f3f-4e65-a663-f391e48e8675 | 7222.00 |              0.1 |            0.00
- 2026 |     5 | 17d328e4-6f3f-4e65-a663-f391e48e8675 | 3600.00 |              0.5 |           60.00
- 2026 |     6 | 17d328e4-6f3f-4e65-a663-f391e48e8675 | 3511.00 |              0.1 |           24.00
- 2026 |     1 | 8b8f05fd-45f3-4231-a6cb-a3500b678da2 | 4876.00 |              0.5 |            0.00
- 2026 |     2 | 8b8f05fd-45f3-4231-a6cb-a3500b678da2 | 6563.00 |              0.5 |            0.00
- 2026 |     3 | 8b8f05fd-45f3-4231-a6cb-a3500b678da2 | 5490.00 |              0.1 |            0.00
- 2026 |     4 | 8b8f05fd-45f3-4231-a6cb-a3500b678da2 | 3275.00 |              0.2 |            0.00
- 2026 |     5 | 8b8f05fd-45f3-4231-a6cb-a3500b678da2 | 8498.00 |              0.5 |           60.00
- 2026 |     6 | 8b8f05fd-45f3-4231-a6cb-a3500b678da2 | 8801.00 |              0.5 |            0.00
- 2026 |     1 | 3317e565-fd05-4b94-a9b0-0e9bd8864ed5 | 5643.00 |              0.5 |            0.00
- 2026 |     2 | 3317e565-fd05-4b94-a9b0-0e9bd8864ed5 | 3523.00 |              0.5 |            0.00
- 2026 |     3 | 3317e565-fd05-4b94-a9b0-0e9bd8864ed5 | 3042.00 |              0.1 |            0.00
- 2026 |     4 | 3317e565-fd05-4b94-a9b0-0e9bd8864ed5 | 5731.00 |              0.2 |            0.00
- 2026 |     5 | 3317e565-fd05-4b94-a9b0-0e9bd8864ed5 | 7044.00 |              0.1 |            0.00
- 2026 |     6 | 3317e565-fd05-4b94-a9b0-0e9bd8864ed5 | 8382.00 |              0.1 |           12.00
- 2026 |     1 | cb97347e-cbc8-4da7-bf2d-07c2650c6cc6 | 3099.00 |              0.3 |            0.00
- 2026 |     2 | cb97347e-cbc8-4da7-bf2d-07c2650c6cc6 | 7243.00 |              0.5 |            0.00
-(20 строк)
+2026	10	d0df13ce-62aa-4b33-95c9-1d6ba10e7711	26.25	0.1	26.25
+2026	5	f1fd921e-8919-4998-8641-a4777f30c323	0.00	0.5	0.00
+2026	6	f1fd921e-8919-4998-8641-a4777f30c323	31.50	0.1	31.50
+2026	7	f1fd921e-8919-4998-8641-a4777f30c323	0.00	0.1	0.00
+2026	8	f1fd921e-8919-4998-8641-a4777f30c323	0.00	0.1	0.00
+2026	9	f1fd921e-8919-4998-8641-a4777f30c323	31.50	0.1	31.50
+2026	10	f1fd921e-8919-4998-8641-a4777f30c323	0.00	0.1	0.00
+2026	5	81aaf0d0-8274-4743-a530-7e535ccc1d79	0.00	0.1	0.00
+2026	6	81aaf0d0-8274-4743-a530-7e535ccc1d79	0.00	0.1	0.00
 ```
-Вердикт: FAIL
+Вердикт: OK
 ### C.9. Повторный вызов не ломает
 
 ```sql
@@ -620,18 +594,6 @@ LIMIT 20;
 ```
 
 Ожидается: `rating = expected`.
-Проверочный запрос скорректирован под фактические таблицы.
-```commandline
-SELECT p.product_id, p.rating,
-       (SELECT round(avg(r.rating), 2)
-        FROM product_reviews pr
-        JOIN review r ON pr.review_id = r.review_id
-        WHERE pr.product_id = p.product_id
-          AND pr.entity_type = 'блюдо') AS expected
-FROM product p
-WHERE p.rating IS NOT NULL
-LIMIT 20;
-```
 Факт: 
 ```commandline
               product_id              | rating | expected
@@ -688,9 +650,7 @@ CALL add_product(
 Ожидается: ошибка с внятным сообщением.
 Факт: 
 ```commandline
-test_backup=> call add_product('prrrr', '00000000-0000-0000-0000-000000000000', 12, '00000000-0000-0000-0000-000000000000','www.www.qqq', 6, 'архив', 'mmmm');
-ОШИБКА:  Ресторан с id 00000000-0000-0000-0000-000000000000 не существует.
-КОНТЕКСТ:  функция PL/pgSQL add_product(character varying,uuid,numeric,uuid,text,numeric,product_status,text), строка 4, оператор RAISE
+SQL Error [P0001]: ОШИБКА: Указанный ресторан или категория продукта не существуют.
 ```
 
 ### E.3. `rating_change` — пересчитывает рейтинг
@@ -781,9 +741,8 @@ LIMIT 20;
 - У уволенных — не изменился.
 - `courier_pay` содержит запись за текущий месяц.
 
-Факт: 
-Пересчета нет, за текущий месяц записи есть.
-Вердикт: FAIL
+Факт: выполнеоно.
+Вердикт: OK
 
 ### E.7. `courier_salary()` — повторный вызов
 
@@ -845,8 +804,8 @@ WHERE sum_no_commission = 0 OR sum_no_commission IS NULL;
 ```
 
 Ожидается: если в какие-то месяцы заказов не было — они есть в результате.
-Факт: нет месяцев без заказов
-Вердикт: FAIL
+Факт: месяцы без заказов отображаются
+Вердикт: OK
 
 ### F.4. Корректность сумм
 
@@ -930,7 +889,7 @@ RESET ROLE;
 ```
 
 Ожидается: 12 + N (количество таблиц).
-Факт: 16
+Факт: 14
 Вердикт: OK
 
 ### G.4. `pg_catalog` читается под `inspector`
@@ -943,7 +902,7 @@ RESET ROLE;
 ```
 
 Ожидается: 12 + N.
-Факт: 15
+Факт: 13
 Вердикт: OK
 
 ### G.5. Все процедуры/функции работают под `inspector`
@@ -1053,6 +1012,6 @@ SELECT count(*) FROM orders;
 ```
 
 Ожидается: 50.
-Факт: 54
-Вердикт: OK (есть ошибка в скрипте геренации тестовых данных)
+Факт: 50
+Вердикт: OK
 

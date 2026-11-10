@@ -8,20 +8,24 @@ begin
         select
             co.courier_id,
             co.status,
-            co.coefficient as current_coeff,
+            coalesce(cp.coefficient_used, co.coefficient) as current_coeff,
             count(od.order_id) as order_count,
             coalesce(sum(od.commission), 0.00) as total_comm
         from zernov_food.courier co
+        left join zernov_food.courier_pay cp on co.courier_id = cp.courier_id
+            and cp.year = current_year
+            and cp.month = current_month
         left join zernov_food.orders od on co.courier_id = od.courier_id
             and od.status = 'доставлен'
             and extract(year from od.order_timestamp) = current_year
             and extract(month from od.order_timestamp) = current_month
-        group by co.courier_id, co.status, co.coefficient
+        group by co.courier_id, co.status, cp.coefficient_used, co.coefficient
     ),
     calculated_salary as (
         select
             cm.courier_id,
             cm.status,
+            cm.current_coeff,
             (cm.current_coeff * cm.total_comm)::numeric(8, 2) as salary_amount,
             case
                 when cm.order_count between 0 and 150 then 0.1
@@ -33,7 +37,7 @@ begin
     ),
     upsert_pay as (
         insert into zernov_food.courier_pay (year, month, courier_id, amount, coefficient_used)
-        select current_year, current_month, cs.courier_id, cs.salary_amount, cs.next_coeff
+        select current_year, current_month, cs.courier_id, cs.salary_amount, cs.current_coeff
         from calculated_salary cs
         on conflict (year, month, courier_id) do update
         set amount = excluded.amount,

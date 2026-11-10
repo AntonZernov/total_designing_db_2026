@@ -7,7 +7,7 @@ with recursive limits as (
     where od.status = 'доставлен'
 ),
 months_series (month_date) as (
-    select min_month from limits
+    select min_month from limits where min_month is not null
     union all
     select (month_date + interval '1 month')::timestamp
     from months_series
@@ -57,7 +57,7 @@ select
     wm.sum_with_commission,
     wm.commission,
     wm.prev_commission,
-    (wm.commission - coalesce(wm.prev_commission, 0.00)) as commission_diff,
+    (wm.commission - wm.prev_commission) as commission_diff,
     wm.courier_pay,
     (wm.commission - wm.courier_pay) as net_profit
 from windowed_metrics wm;

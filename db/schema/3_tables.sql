@@ -25,15 +25,21 @@ create table if not exists zernov_food.restaurant (
     description text not null,
     work_start time not null,
     work_end time not null,
+    company_details text not null,
     rating numeric(3, 2) check (rating between 0 and 5),
     status zernov_food.restaurant_status not null,
     constraint restaurant_work_hours check (work_start < work_end)
 );
 
+create table if not exists zernov_food.courier_profile (
+    courier_profile_id uuid primary key default exts.uuid_generate_v4(),
+    fio varchar(128) not null,
+    phone_number varchar(20) not null unique
+);
+
 create table if not exists zernov_food.courier (
     courier_id uuid primary key default exts.uuid_generate_v4(),
-    fio varchar(128) not null,
-    phone_number varchar(20) not null unique,
+    courier_profile_id uuid not null references zernov_food.courier_profile(courier_profile_id),
     status zernov_food.courier_status not null,
     hire_date date not null,
     dismissal_date date,
@@ -58,7 +64,7 @@ create table if not exists zernov_food.product_category (
 
 create table if not exists zernov_food.product (
     product_id uuid primary key default exts.uuid_generate_v4(),
-    product_name varchar(128) not null unique,
+    product_name varchar(128) not null,
     product_category_id uuid not null references zernov_food.product_category(product_category_id),
     price numeric(8, 2) not null check (price >= 0),
     restaurant_id uuid not null references zernov_food.restaurant(restaurant_id),
@@ -66,7 +72,8 @@ create table if not exists zernov_food.product (
     rating numeric(3, 2) check (rating between 0 and 5),
     status zernov_food.product_status not null,
     description text not null,
-    constraint product_restaurant_ukey unique (product_id, restaurant_id)
+    constraint product_restaurant_ukey unique (product_id, restaurant_id),
+    constraint product_name_per_restaurant_ukey unique (product_name, restaurant_id)
 );
 
 create table if not exists zernov_food.orders (
@@ -78,11 +85,15 @@ create table if not exists zernov_food.orders (
     order_timestamp timestamp not null default localtimestamp,
     delivery_timestamp timestamp,
     order_amount numeric(8, 2) not null check (order_amount >= 0),
-    commission numeric(8, 2) generated always as (round(order_amount * 0.1, 2)) stored,
-    total_amount numeric(8, 2) generated always as (order_amount + round(order_amount * 0.1, 2)) stored,
+    commission numeric(8, 2) generated always as (round(order_amount * 0.1, 2)) stored not null,
+    total_amount numeric(8, 2) generated always as (order_amount + round(order_amount * 0.1, 2)) stored not null,
     status zernov_food.order_status not null,
     pay_status zernov_food.order_pay_status not null,
     description text,
+    constraint orders_status_and_delivery_time check (
+        (status = 'доставлен' and delivery_timestamp is not null) or
+        (status != 'доставлен')
+    ),
     constraint orders_total_min check (order_amount + round(order_amount * 0.1, 2) >= 1000),
     constraint orders_delivery_after_order check (delivery_timestamp >= order_timestamp),
     constraint orders_client_address_fkey foreign key (client_id, address_id)
@@ -119,32 +130,16 @@ create unique index one_success_payment_per_order on zernov_food.payment (order_
 create table if not exists zernov_food.review (
     review_id uuid primary key default exts.uuid_generate_v4(),
     client_id uuid not null references zernov_food.client(client_id),
+    order_id uuid not null references zernov_food.orders(order_id),
     review_timestamp timestamp not null default localtimestamp,
-    order_id uuid not null,
+    entity_type zernov_food.review_entity not null,
+    entity_id uuid not null,
     description text not null,
     photo_url text,
-    rating numeric(3, 2) not null check (rating between 0 and 5),
+    rating numeric(3, 2) not null check (rating between 1 and 5),
     constraint review_order_client_fkey foreign key (order_id, client_id)
-        references zernov_food.orders(order_id, client_id)
-);
-
-create table if not exists zernov_food.order_reviews (
-    review_id uuid primary key references zernov_food.review(review_id) on delete cascade,
-    order_id uuid not null unique,
-    entity_type zernov_food.review_entity not null default 'заказ' check (entity_type = 'заказ')
-);
-
-create table if not exists zernov_food.restaurant_reviews (
-    review_id uuid primary key references zernov_food.review(review_id) on delete cascade,
-    restaurant_id uuid not null references zernov_food.restaurant(restaurant_id),
-    order_id uuid not null unique,
-    entity_type zernov_food.review_entity not null default 'ресторан' check (entity_type = 'ресторан')
-);
-
-create table if not exists zernov_food.product_reviews (
-    review_id uuid primary key references zernov_food.review(review_id) on delete cascade,
-    product_id uuid not null references zernov_food.product(product_id),
-    order_id uuid not null,
-    entity_type zernov_food.review_entity not null default 'блюдо' check (entity_type = 'блюдо'),
-    constraint uq_product_reviews_order_product unique (order_id, product_id)
+        references zernov_food.orders(order_id, client_id),
+    constraint review_order_entity_check check (
+        entity_type != 'заказ' or entity_id = order_id
+    )
 );
